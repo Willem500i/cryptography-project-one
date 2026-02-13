@@ -8,18 +8,25 @@ from protocol import M, D, L, run_execution, count_wasted_pads
 
 
 def scenario_active_senders(m: int, x: int, rng: random.Random) -> List[int]:
-    # which x parties can send this run (random subset of 0..m-1)
-    ...
+    return rng.sample(range(m), min(x, m))
 
 
 def run_one_trial(n: int, m: int, d: int, L: int, active_senders: List[int], rng: random.Random) -> Tuple[int, int]:
-    # run_execution with these active_senders; return (wasted_pads, rounds)
-    ...
+    state, rounds = run_execution(n, m, d, L, active_senders, rng=rng)
+    return count_wasted_pads(state), rounds
 
 
 def run_scenario(scenario_name: str, n: int, m: int, d: int, L: int, x: int, num_trials: int, base_seed: int) -> None:
-    # for each trial get active_senders via scenario_active_senders(m, x, rng), run_one_trial, collect (wasted, rounds); print scenario_name and averages
-    ...
+    wasted_list, rounds_list = [], []
+    for t in range(num_trials):
+        rng = random.Random(base_seed + t)
+        active = scenario_active_senders(m, x, rng)
+        w, r = run_one_trial(n, m, d, L, active, rng)
+        wasted_list.append(w)
+        rounds_list.append(r)
+    avg_w = sum(wasted_list) / len(wasted_list)
+    avg_r = sum(rounds_list) / len(rounds_list)
+    print(f"  {scenario_name}: avg wasted = {avg_w:.1f}, avg rounds = {avg_r:.1f}")
 
 
 def main():

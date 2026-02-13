@@ -49,6 +49,7 @@ python testing.py -n 500 -d 5 --trials 200 --seed 123
 
 ## Files (what each one is for)
 
-- **protocol.py** — Core protocol: pad allocation (`init_party_states`), secrecy condition (`undelivery_secrecy_condition`), send/deliver and one execution loop (`run_execution`). Implement the dataclass fields and all `...` bodies.
-- **testing.py** — Test harness: pick active senders per scenario, run trials, report avg wasted pads and rounds. Implement so it calls `protocol.run_execution` and `protocol.count_wasted_pads`.
-- **requirements.txt** — Python 3.8+; no extra packages required for the outline.
+- **protocol.py** — Core protocol: pad allocation, secrecy condition, send/deliver, `run_execution`, wasted-pad count.
+- **testing.py** — Test harness: scenarios S.1, S.2, S.m; calls `protocol.run_execution` and `protocol.count_wasted_pads`. Does *not* use the chat sim yet.
+- **chat_sim.py** — Group chat simulation (sending/receiving messages). Outline only; [groupmate] implements. When done, testing can optionally call into this instead of (or in addition to) `run_execution`.
+- **requirements.txt** — Python 3.8+; no extra packages required.
