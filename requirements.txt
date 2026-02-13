@@ -1,0 +1,3 @@
+# Python 3.8+ recommended. No third-party dependencies required for the outline.
+# Add any libraries you use for your implementation or tests below:
+# e.g. pytest>=7.0.0
