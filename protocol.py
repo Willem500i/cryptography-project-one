@@ -19,124 +19,151 @@ class InFlightMessage:
 
 @dataclass
 class PartyState:
-    party_id: int
     indices: List[int]   # pad indices this party may use (order they'll use them)
     offset: int          # next index to use is indices[offset]
 
+# Chat Simulation
+class Channel:
+    def __init__(self, m: int, n: int, d: int, l: int):
+        self.n = n
+        self.m = m
+        self.d = d
+        self.L = l
 
-@dataclass
-class ProtocolState:
-    n: int
-    m: int
-    d: int
-    L: int
-    parties: List[PartyState]
-    pad_owner: List[Optional[int]]
-    in_flight: List[InFlightMessage]
+        self.pad_owner = [None] * n
+        self.in_flight = []
 
-# --- Allocation ---
-# Start with equal segments; redistribute() re-splits unused pads so heavy senders can use more.
-def init_party_states(m: int, n: int) -> List[PartyState]:
-    chunk = n // m
-    out = []
-    for i in range(m):
-        start = i * chunk
-        end = (i + 1) * chunk if i < m - 1 else n
-        out.append(PartyState(party_id=i, indices=list(range(start, end)), offset=0))
-    return out
+        self.parties = []
+        chunk = n // m
+        out = []
+        for i in range(m):
+            start = i * chunk
+            end = (i + 1) * chunk if i < m - 1 else n
+            new_party = Party(
+                party_id=i,
+                channel=self,
+                state=PartyState(indices=list(range(start, end)), offset=0)
+            )
+            self.register_user(new_party)   # create party object
+
+    def register_user(self, party):
+        self.parties.append(party)
+    
+    def broadcast(self, message, sender):
+        for party in self.parties:
+            if party != sender:
+                party.receive(message,sender)
+
+class Party:
+    def __init__(self, party_id, channel, state):
+        self.party_id = party_id
+        self.channel = channel
+        self.state = state
+    
+    def send(self, ciphertext):
+        # print(f"User {self.party_id} is sending a message")
+        # encryption logic goes here
+        self.channel.broadcast(ciphertext, self.party_id)
+
+    def receive(self, ciphertext, sender):
+        if sender != self:
+            # decryption logic goes here
+            # print(f"User {self.party_id} received message from {sender}")
+            pass
 
 
-def pads_for_message(party: PartyState, L: int) -> List[int]:
-    if party.offset + L > len(party.indices):
+def pads_for_message(party: Party, L: int) -> List[int]:
+    if party.state.offset + L > len(party.state.indices):
         return []
-    return party.indices[party.offset : party.offset + L]
+    return party.state.indices[party.state.offset : party.state.offset + L]
 
 
-def redistribute(state: ProtocolState) -> None:
+def redistribute(channel: Channel) -> None:
     """Take all unused pads, split evenly among m parties. Call every REDISTRIBUTE_EVERY messages."""
-    free = [i for i in range(state.n) if state.pad_owner[i] is None]
+    free = [i for i in range(channel.n) if channel.pad_owner[i] is None]
     if not free:
         return
     # split into m roughly equal parts
-    m = state.m
+    m = channel.m
     size = len(free)
     chunk_size = size // m
     remainder = size % m
     start = 0
     for j in range(m):
         take = chunk_size + (1 if j < remainder else 0)
-        state.parties[j].indices = free[start : start + take]
-        state.parties[j].offset = 0
+        channel.parties[j].state.indices = free[start : start + take]
+        channel.parties[j].state.offset = 0
         start += take
 
 # --- Secrecy and send ---
-def undelivery_secrecy_condition(state: ProtocolState, party_id: int, pad_indices: List[int]) -> bool:
+def undelivery_secrecy_condition(channel: Channel, party_id: int, pad_indices: List[int]) -> bool:
     for i in pad_indices:
-        if state.pad_owner[i] is not None:
+        if channel.pad_owner[i] is not None:
             return False
     return True
 
 
-def can_send(state: ProtocolState, party_id: int) -> bool:
-    party = state.parties[party_id]
-    indices = pads_for_message(party, state.L)
-    if len(indices) != state.L:
+def can_send(channel: Channel, party: Party) -> bool:
+    indices = pads_for_message(party, channel.L)
+    if len(indices) != channel.L:
         return False
-    return undelivery_secrecy_condition(state, party_id, indices)
+    return undelivery_secrecy_condition(channel, party, indices)
 
 
-def send_message(state: ProtocolState, party_id: int) -> Optional[InFlightMessage]:
-    if not can_send(state, party_id):
+def send_message(channel: Channel, party: Party) -> Optional[InFlightMessage]:
+    if not can_send(channel, party):
         return None
-    party = state.parties[party_id]
-    indices = pads_for_message(party, state.L)
+    
+    indices = pads_for_message(party, channel.L)
     for i in indices:
-        state.pad_owner[i] = party_id
-    msg = InFlightMessage(sender_id=party_id, pad_indices=indices.copy())
-    party.offset += state.L
-    state.in_flight.append(msg)
+        channel.pad_owner[i] = party.party_id
+    msg = InFlightMessage(sender_id=party.party_id, pad_indices=indices.copy())
+    party.state.offset += channel.L
+    channel.in_flight.append(msg)
+    party.send(msg)  # simulate sending the message
     return msg
 
 # --- Delivery ---
-def deliver_message(state: ProtocolState, msg: InFlightMessage) -> None:
-    state.in_flight.remove(msg)
+def deliver_message(channel: Channel, msg: InFlightMessage) -> None:
+    # TODO: add check that all users received message
+    channel.in_flight.remove(msg)
 
 
-def step_deliveries(state: ProtocolState, max_deliver: int = 1) -> None:
-    for _ in range(min(max_deliver, len(state.in_flight))):
-        if state.in_flight:
-            deliver_message(state, state.in_flight[0])
+def step_deliveries(channel: Channel, max_deliver: int = 1) -> None:
+    for _ in range(min(max_deliver, len(channel.in_flight))):
+        if channel.in_flight:
+            deliver_message(channel, channel.in_flight[0])
 
 # --- Execution and stats ---
-def count_wasted_pads(state: ProtocolState) -> int:
-    return sum(1 for o in state.pad_owner if o is None)
+def count_wasted_pads(channel: Channel) -> int:
+    return sum(1 for o in channel.pad_owner if o is None)
 
 
-def run_execution(n: int, m: int, d: int, L: int, active_senders: List[int],
-                  rng: Optional[random.Random] = None, max_rounds: Optional[int] = None) -> Tuple[ProtocolState, int]:
+def run_execution(n: int, m: int, d: int, L: int,
+                  rng: Optional[random.Random] = None, max_rounds: Optional[int] = None) -> Tuple[Channel, int]:
+    channel = Channel(m, n, d, L)
     rng = rng or random.Random()
-    pad_owner = [None] * n
-    parties = init_party_states(m, n)
-    state = ProtocolState(n=n, m=m, d=d, L=L, parties=parties, pad_owner=pad_owner, in_flight=[])
+    
+    parties = channel.parties
     rounds = 0
     messages_since_redist = 0
     while True:
-        sender = rng.choice(active_senders)
-        if not can_send(state, sender):
+        sender = rng.choice(parties)
+        if not can_send(channel, sender):
             break
-        send_message(state, sender)
+        send_message(channel, sender)
         rounds += 1
         messages_since_redist += 1
         if messages_since_redist >= REDISTRIBUTE_EVERY:
-            redistribute(state)
+            redistribute(channel)
             messages_since_redist = 0
-        while len(state.in_flight) > d:
-            step_deliveries(state, 1)
+        while len(channel.in_flight) > d:
+            step_deliveries(channel, 1)
         if max_rounds is not None and rounds >= max_rounds:
             break
-    return state, rounds
+    return channel, rounds
 
 # --- Main ---
 if __name__ == "__main__":
-    state, rounds = run_execution(100, M, D, L, list(range(M)))
-    print("rounds", rounds, "wasted", count_wasted_pads(state))
+    channel, rounds = run_execution(100, M, D, L)
+    print("rounds", rounds, "wasted", count_wasted_pads(channel))

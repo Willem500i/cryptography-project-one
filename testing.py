@@ -12,8 +12,9 @@ def scenario_active_senders(m: int, x: int, rng: random.Random) -> List[int]:
 
 
 def run_one_trial(n: int, m: int, d: int, L: int, active_senders: List[int], rng: random.Random) -> Tuple[int, int]:
-    state, rounds = run_execution(n, m, d, L, active_senders, rng=rng)
-    return count_wasted_pads(state), rounds
+    #state, rounds = run_execution(n, m, d, L, active_senders, rng=rng)
+    channel, rounds = run_execution(n, m, d, L)
+    return count_wasted_pads(channel), rounds
 
 
 def run_scenario(scenario_name: str, n: int, m: int, d: int, L: int, x: int, num_trials: int, base_seed: int) -> None:
