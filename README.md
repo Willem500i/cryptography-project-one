@@ -11,7 +11,7 @@ m-party asynchronous communication with perfect secrecy (no pad reused). Support
 - **Start:** Pads are split into m equal segments; party i gets segment i (e.g. party 0 gets 0..n/m-1, etc.). Each party stores their segment as their local list.
 - **Send:** When a party sends, it uses the next L pad(s) from its local list, marks those pads as used, and adds the message to **in_flight**. No central “who used what” check is needed for the send decision—the list is disjoint from others’ lists until the next redistribution.
 - **Delivery:** The network can have at most **d** undelivered messages. When in_flight would exceed d, we **deliver** one message (remove it from in_flight). On delivery, every other party’s **receive()** is called (chat sim: “message delivered to all m-1 others”).
-- **Redistribution:** Every **REDISTRIBUTE_EVERY** messages (e.g. 20), parties “come together”: we take all **unused** pad indices, split them evenly into m new lists, and assign each party a new list and reset their offset to 0. They then continue asynchronously with their new lists. This keeps waste low even when one party sends much more than others.
+- **Redistribution:** Every **REDISTRIBUTE_EVERY** messages, parties run a **sync phase** so the new split uses only information they could have in a distributed setting: (1) **Drain in-flight** (deliver all pending messages). (2) Each party’s “used” pads are derived from its **local state** (indices[0:offset]). (3) The **free** set is computed as all indices minus the union of those reported-used sets (no global `pad_owner` is used for this decision). (4) Free is split evenly into m new lists and each party gets a new list and offset=0. They then continue asynchronously. `pad_owner` is kept only for bookkeeping and correctness checks, not for protocol decisions.
 - **Stop:** The run ends when at least one active party cannot send (its local list doesn’t have L pads left). **Wasted pads** = number of pad indices never used.
 
 Parameters (in `protocol.py`): **M** (parties), **D** (max undelivered), **L** (pads per message), **REDISTRIBUTE_EVERY**.
@@ -28,7 +28,7 @@ python protocol.py
 
 This runs a **dummy demo** that shows the protocol step-by-step:
 
-- **Setup:** n=600, m=3, d=5, L=1, redistribute every 20 messages. Run continues until no party can send (no artificial round limit).
+- **Setup:** n=600, m=3, d=5, L=1, redistribute every 50 messages (see REDISTRIBUTE_EVERY in protocol). Run continues until no party can send (no artificial round limit).
 - **Verbose output:** The **first 10 rounds** are printed in full: each round shows which party sends (and which pads), when in_flight exceeds d (and one message is delivered), and when a redistribution happens (sync + new list lengths). After that, one line says that later rounds are omitted and the run continues to completion.
 - **End:** Prints “Stop: no party can send …” and a **Done** line with total rounds, wasted pads (as count and % of n), number of redistributions, and chat sim deliveries. This demonstrates that waste is a small fraction of n (e.g. a few percent) when the protocol runs to completion.
 
