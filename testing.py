@@ -12,29 +12,32 @@ def scenario_active_senders(m: int, x: int, rng: random.Random) -> List[int]:
     return rng.sample(range(m), min(x, m))
 
 
-def run_one_trial(n: int, m: int, d: int, L: int, active_senders: List[int], rng: random.Random) -> Tuple[int, int, int]:
+def run_one_trial(n: int, m: int, d: int, L: int, active_senders: List[int], rng: random.Random) -> Tuple[int, int, int, int]:
     channel, rounds, num_redist = run_execution(n, m, d, L, active_senders, rng=rng)
-    return count_wasted_pads(channel), rounds, num_redist
+    return count_wasted_pads(channel), rounds, num_redist, channel.deliveries_count
 
 
 def run_scenario(scenario_name: str, n: int, m: int, d: int, L: int, x: int, num_trials: int, base_seed: int) -> float:
-    wasted_list, rounds_list, redist_list = [], [], []
+    wasted_list, rounds_list, redist_list, deliveries_list = [], [], [], []
     t0 = time.perf_counter()
     for t in range(num_trials):
         rng = random.Random(base_seed + t)
         active = scenario_active_senders(m, x, rng)
-        w, r, rd = run_one_trial(n, m, d, L, active, rng)
+        w, r, rd, deliv = run_one_trial(n, m, d, L, active, rng)
         wasted_list.append(w)
         rounds_list.append(r)
         redist_list.append(rd)
+        deliveries_list.append(deliv)
     elapsed = time.perf_counter() - t0
     avg_w = sum(wasted_list) / len(wasted_list)
     avg_r = sum(rounds_list) / len(rounds_list)
     avg_redist = sum(redist_list) / len(redist_list)
+    avg_deliv = sum(deliveries_list) / len(deliveries_list)
     pct = 100 * avg_w / n if n else 0
     msgs_per_redist = avg_r / avg_redist if avg_redist > 0 else float("inf")
     print(f"  {scenario_name}: avg wasted = {avg_w:.1f} ({pct:.2f}%), avg rounds = {avg_r:.1f}, time = {elapsed:.2f}s")
     print(f"    async efficiency: avg redistributions = {avg_redist:.1f}, avg messages per redistribution = {msgs_per_redist:.1f}")
+    print(f"    chat sim: avg deliveries (receive calls) = {avg_deliv:.1f}")
     return elapsed
 
 

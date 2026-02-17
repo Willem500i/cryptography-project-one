@@ -37,6 +37,8 @@ class Channel:
         self.pad_owner = [None] * n
         self.in_flight: List[InFlightMessage] = []
         self.parties: List["Party"] = []
+        self.deliveries_count = 0  # number of receive() calls (chat sim: message delivered to a party)
+        self.verbose = False
         # initial equal segments; each party saves their list locally
         self._init_party_states(m, n)
 
@@ -53,6 +55,7 @@ class Channel:
         self.parties.append(party)
 
     def broadcast(self, message: InFlightMessage, sender: "Party") -> None:
+        # Optional: use for "on send" notification. Protocol calls receive() on delivery (in deliver_message).
         for party in self.parties:
             if party.party_id != sender.party_id:
                 party.receive(message, sender)
@@ -65,10 +68,12 @@ class Party:
         self.state = state
 
     def send(self, ciphertext: InFlightMessage) -> None:
+        # Optional: call from send_message for "on send" sim. Delivery sim uses deliver_message -> receive().
         self.channel.broadcast(ciphertext, self)
 
     def receive(self, ciphertext: InFlightMessage, sender: "Party") -> None:
-        pass
+        # Chat sim: this party has "received" the message (same-time delivery to all m-1 others).
+        self.channel.deliveries_count += 1
 
 
 # --- Allocation: each party uses their local list until next redistribution ---
@@ -88,11 +93,15 @@ def redistribute(channel: Channel) -> None:
     chunk_size = size // m
     remainder = size % m
     start = 0
+    lengths = []
     for j in range(m):
         take = chunk_size + (1 if j < remainder else 0)
         channel.parties[j].state.indices = free[start : start + take]
         channel.parties[j].state.offset = 0
+        lengths.append(take)
         start += take
+    if channel.verbose:
+        print(f"  Redistribution: {size} unused pads split among {m} parties -> list lengths {lengths}")
 
 
 # --- Secrecy: between redistributions lists are disjoint, so using from our list is safe ---
@@ -119,13 +128,22 @@ def send_message(channel: Channel, party: Party) -> Optional[InFlightMessage]:
     msg = InFlightMessage(sender_id=party.party_id, pad_indices=indices.copy())
     party.state.offset += channel.L
     channel.in_flight.append(msg)
-    party.send(msg)
+    if channel.verbose:
+        others = [p.party_id for p in channel.parties if p.party_id != party.party_id]
+        print(f"  Party {party.party_id} sends (pads {indices}) -> in_flight now {len(channel.in_flight)} (will deliver to Parties {others} when delivered)")
     return msg
 
 
 # --- Delivery ---
 def deliver_message(channel: Channel, msg: InFlightMessage) -> None:
+    sender = channel.parties[msg.sender_id]
+    recipients = [p.party_id for p in channel.parties if p.party_id != msg.sender_id]
+    for p in channel.parties:
+        if p.party_id != msg.sender_id:
+            p.receive(msg, sender)
     channel.in_flight.remove(msg)
+    if channel.verbose:
+        print(f"  Delivered: Party {msg.sender_id} -> Parties {recipients} (pads {msg.pad_indices})")
 
 
 def step_deliveries(channel: Channel, max_deliver: int = 1) -> None:
@@ -147,25 +165,45 @@ def run_execution(
     active_senders: List[int],
     rng: Optional[random.Random] = None,
     max_rounds: Optional[int] = None,
+    verbose: bool = False,
+    redistribute_every: Optional[int] = None,
+    max_verbose_rounds: Optional[int] = None,
 ) -> Tuple[Channel, int, int]:
+    every = redistribute_every if redistribute_every is not None else REDISTRIBUTE_EVERY
     channel = Channel(m, n, d, L)
+    channel.verbose = verbose
     rng = rng or random.Random()
     active_parties = [channel.parties[i] for i in active_senders]
     rounds = 0
     messages_since_redist = 0
     num_redistributions = 0
+    omitted_printed = False
+    if verbose:
+        print("Start: each party has local list of pad indices (equal segments).")
     while True:
         sender = rng.choice(active_parties)
         if not can_send(channel, sender):
+            if verbose:
+                print("Stop: no party can send (local list exhausted or pad conflict).")
             break
+        if max_verbose_rounds is not None and rounds >= max_verbose_rounds and verbose and not omitted_printed:
+            channel.verbose = False
+            omitted_printed = True
+            print(f"  ... rounds {max_verbose_rounds + 1} onward omitted (run continues to completion) ...")
+        if channel.verbose:
+            print(f"Round {rounds + 1}:")
         send_message(channel, sender)
         rounds += 1
         messages_since_redist += 1
-        if messages_since_redist >= REDISTRIBUTE_EVERY:
+        if messages_since_redist >= every:
+            if verbose:
+                print("  Sync: parties agree on new split of unused pads.")
             redistribute(channel)
             messages_since_redist = 0
             num_redistributions += 1
         while len(channel.in_flight) > d:
+            if verbose:
+                print(f"  (in_flight={len(channel.in_flight)} > d={d} -> deliver one)")
             step_deliveries(channel, 1)
         if max_rounds is not None and rounds >= max_rounds:
             break
@@ -174,5 +212,14 @@ def run_execution(
 
 # --- Main ---
 if __name__ == "__main__":
-    channel, rounds, num_redist = run_execution(100, M, D, L, list(range(M)))
-    print("rounds", rounds, "wasted", count_wasted_pads(channel), "redistributions", num_redist)
+    # Demo: real-sized run to show low waste; first 10 rounds printed in full, then run to completion
+    demo_n, demo_m, demo_d = 600, 3, 5
+    print(f"Demo: n={demo_n}, m={demo_m}, d={demo_d}, L={L}, redistribute every {REDISTRIBUTE_EVERY} messages")
+    print("(First 10 rounds in full, then run to completion.)\n")
+    channel, rounds, num_redist = run_execution(
+        demo_n, demo_m, demo_d, L, list(range(demo_m)),
+        rng=random.Random(42), verbose=True, max_verbose_rounds=10
+    )
+    wasted = count_wasted_pads(channel)
+    pct = 100 * wasted / demo_n
+    print(f"\nDone: rounds={rounds}, wasted={wasted}/{demo_n} ({pct:.1f}%), redistributions={num_redist}, chat sim deliveries={channel.deliveries_count}")
