@@ -147,12 +147,13 @@ def run_execution(
     active_senders: List[int],
     rng: Optional[random.Random] = None,
     max_rounds: Optional[int] = None,
-) -> Tuple[Channel, int]:
+) -> Tuple[Channel, int, int]:
     channel = Channel(m, n, d, L)
     rng = rng or random.Random()
     active_parties = [channel.parties[i] for i in active_senders]
     rounds = 0
     messages_since_redist = 0
+    num_redistributions = 0
     while True:
         sender = rng.choice(active_parties)
         if not can_send(channel, sender):
@@ -163,14 +164,15 @@ def run_execution(
         if messages_since_redist >= REDISTRIBUTE_EVERY:
             redistribute(channel)
             messages_since_redist = 0
+            num_redistributions += 1
         while len(channel.in_flight) > d:
             step_deliveries(channel, 1)
         if max_rounds is not None and rounds >= max_rounds:
             break
-    return channel, rounds
+    return channel, rounds, num_redistributions
 
 
 # --- Main ---
 if __name__ == "__main__":
-    channel, rounds = run_execution(100, M, D, L, list(range(M)))
-    print("rounds", rounds, "wasted", count_wasted_pads(channel))
+    channel, rounds, num_redist = run_execution(100, M, D, L, list(range(M)))
+    print("rounds", rounds, "wasted", count_wasted_pads(channel), "redistributions", num_redist)
