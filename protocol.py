@@ -9,9 +9,9 @@ from typing import List, Optional, Tuple
 
 # --- Parameters ---
 M = 3
-D = 5
+D = 12
 L = 1
-REDISTRIBUTE_EVERY = 20  # every this many messages, parties sync and redistribute unused pads
+REDISTRIBUTE_EVERY = 50  # every this many messages, parties sync and redistribute unused pads (larger = more async, fewer sync points)
 
 
 # --- Data structures ---
