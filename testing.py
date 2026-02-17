@@ -12,8 +12,7 @@ def scenario_active_senders(m: int, x: int, rng: random.Random) -> List[int]:
 
 
 def run_one_trial(n: int, m: int, d: int, L: int, active_senders: List[int], rng: random.Random) -> Tuple[int, int]:
-    #state, rounds = run_execution(n, m, d, L, active_senders, rng=rng)
-    channel, rounds = run_execution(n, m, d, L)
+    channel, rounds = run_execution(n, m, d, L, active_senders, rng=rng)
     return count_wasted_pads(channel), rounds
 
 
