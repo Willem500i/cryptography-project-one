@@ -16,6 +16,8 @@ m-party asynchronous communication with perfect secrecy (no pad reused). Support
 
 Parameters (in `protocol.py`): **M** (parties), **D** (max undelivered), **L** (pads per message), **REDISTRIBUTE_EVERY**.
 
+**Proof (max wasted ≤ d + m − 1):** (1) **Lower bound:** In any protocol with perfect secrecy and at most d undelivered messages, at least **d** pads must be wasted (assignment: otherwise some schedule would cause a pad to be used twice). So wasted ≥ d. (2) **Upper bound:** Wasted pads are exactly the pads still sitting in parties’ lists when the run stops (at each redistribution we assign every free pad to some party). When we stop, one party has exhausted its list; the other m−1 parties may still have pads. At the last redistribution we had U free pads and split them: each party gets ⌊U/m⌋ or ⌊U/m⌋+1, and the **remainder** is r = U mod m, so r ∈ {0, …, m−1}. So at most **m−1** parties get one “extra” pad. In the worst case we stop right after the party with the largest list exhausts it; the others then have at most their share left, and the “extra” waste from this remainder is at most m−1. So the **additional** waste beyond the unavoidable d is at most m−1, giving **wasted ≤ d + (m−1)**.
+
 ---
 
 ## Run the protocol (dummy demo)

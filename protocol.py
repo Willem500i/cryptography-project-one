@@ -84,13 +84,12 @@ def pads_for_message(party: Party, L: int) -> List[int]:
 
 
 def redistribute(channel: Channel) -> None:
-    """Sync phase: drain in-flight, then compute free set from each party's reported state (not global pad_owner).
-    All parties could do this in a distributed setting after exchanging their (indices, offset) and draining in-flight."""
+    """Sync phase: drain in-flight, then compute free set from pads ever used (pad_owner).
+    Using pad_owner ensures we never reassign a pad used in an earlier segment (after a previous
+    redistribution we overwrite party lists, so reported indices[:offset] would miss those)."""
     while channel.in_flight:
         deliver_message(channel, channel.in_flight[0])
-    used_set = set()
-    for p in channel.parties:
-        used_set.update(p.state.indices[: p.state.offset])
+    used_set = {i for i in range(channel.n) if channel.pad_owner[i] is not None}
     free = [i for i in range(channel.n) if i not in used_set]
     if not free:
         return
