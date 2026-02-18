@@ -9,9 +9,9 @@ from typing import List, Optional, Tuple
 
 # --- Parameters ---
 M = 3
-D = 12
+D = 5
 L = 1
-REDISTRIBUTE_EVERY = 50  # every this many messages, parties sync and redistribute unused pads (larger = more async, fewer sync points)
+REDISTRIBUTE_EVERY = 20  # every this many messages, parties sync and redistribute unused pads (larger = more async, fewer sync points)
 
 
 # --- Data structures ---
@@ -59,6 +59,7 @@ class Channel:
         for party in self.parties:
             if party.party_id != sender.party_id:
                 party.receive(message, sender)
+                # decrypt()
 
 
 class Party:
@@ -69,6 +70,7 @@ class Party:
 
     def send(self, ciphertext: InFlightMessage) -> None:
         # Optional: call from send_message for "on send" sim. Delivery sim uses deliver_message -> receive().
+        # encrypt()
         self.channel.broadcast(ciphertext, self)
 
     def receive(self, ciphertext: InFlightMessage, sender: "Party") -> None:
